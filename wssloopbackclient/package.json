@@ -1,0 +1,14 @@
+{
+  "name": "wssloopbackclient",
+  "version": "1.0.0",
+  "description": "A loopback client to simulate a client on the other end",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Muhammad Salar Khan",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^4.0.0"
+  }
+}
