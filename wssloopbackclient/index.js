@@ -3,29 +3,16 @@ const WebSocket = require('ws');
 const ws = new WebSocket('ws://localhost:7999');
 
 ws.on('open', function open() {
-  ws.send('Hello there');
+  //ws.send('Hello there');
 });
 
-const NEGATIVE_RESPONSE = {
-  category: 'error',
-  data: 'Invalid message'
-};
-const CALL_NEGOTIATION = 'call-negotiation';
 function getLoopBackResponse(message) {
-  /**
-   * The type of message expected here is:
-   * {
-   *  category: 'call-negotiation',
-   *  type: "offer"/"candidate",
-   *  data: "ajhlk4jh234 can be whatever"
-   * }
-   */
-  var category = message.category;
-  var type = message.type;
+  var msg = JSON.parse(message);
+  var type = msg.type;
 
-  if(category != undefined && type != undefined) {
+  if(type != undefined) {
     if (type === 'offer') {
-      var loopbackAnswer = message.data;
+      var loopbackAnswer = message;
       loopbackAnswer = loopbackAnswer.replace('"offer"', '"answer"');
       loopbackAnswer =
           loopbackAnswer.replace('a=ice-options:google-ice\\r\\n', '');
@@ -36,27 +23,23 @@ function getLoopBackResponse(message) {
       // https://bugs.chromium.org/p/chromium/issues/detail?id=616263
       loopbackAnswer = loopbackAnswer
           .replace(/a=crypto:0 AES_CM_128_HMAC_SHA1_32\sinline:.{44}/, '');
-      return {
-        category: CALL_NEGOTIATION,
-        type: "answer",
-        data: loopbackAnswer
-      };
-      sendLoopbackMessage(JSON.parse(loopbackAnswer));
-    } else if (message.type === 'candidate') {
+      return loopbackAnswer;
+    } else if (type === 'candidate') {
       return message;
     }
   } else {
-    return NEGATIVE_RESPONSE;
+    return '{}';
   }
 }
 
 
 ws.on('message', function incoming(message) {
   try {
-    message = JSON.parse(message);
+    response = getLoopBackResponse(message);
+    //console.log(response);
+    ws.send(response);
   } catch(error) {
-    ws.send(JSON.stringify(NEGATIVE_RESPONSE));
+    ws.send(JSON.stringify({ 'message': 'Error while sending loopback response.' }));
     return;
   }
-  ws.send(JSON.stringify(getLoopBackResponse(message)));
 });
