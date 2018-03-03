@@ -1,6 +1,7 @@
-var signalingServer = new WebSocket("ws://localhost:7999");
+// These are the html elements.
 var localVideo = document.getElementById('local-video');
 var remoteVideo = document.getElementById('remote-video');
+
 // This is the state variable and it contains all the variables
 // that we will be needing for a webRTC session.
 var state = {
@@ -14,38 +15,63 @@ var state = {
             certificates: [],
             iceServers: [
                 {
-                    // turn servers
-                    urls:[],
-                    credential: 'password',
-                    username: 'username'
-                },
-                {
-                    // stun servers
-                    urls: ['stun:stun.l.google.com']
+                    "urls":["stun:stun.l.google.com:19302"]
                 }
             ]
         },
-        peerConnectionConstraints: { optional: [{"DtlsSrtpKeyAgreement":false}] },
+        peerConnectionConstraints: { optional: [{DtlsSrtpKeyAgreement:false}] },
         videoRecvCodec: "VP9"
     }
 }
-signalingServer.onopen = function(event){
-    trace("Signaling channel on!");
-    state.signalingChannel = signalingServer;
-    startGettingUserMedia();
-};
 
-signalingServer.onerror = function(err) {
-    trace("Got ws error!");
-    trace(error);
-};
+/**
+	For a given message string this function returns the message that would be
+	returned from the other end.
+*/
+function getLoopbackResponse(msg) {
+	// Convert string to object.
+	var message;
+	try {
+		message = JSON.parse(msg);
+	} catch (e) {
+		trace('Error parsing JSON: ' + msg);
+		return;
+	}
+	// If its an offer convert it to an answer.
+	// If its a candidate, return it as is.
+	if (message.type === 'offer') {
+		var loopbackAnswer = msg + '';
+		loopbackAnswer = loopbackAnswer.replace('"offer"', '"answer"');
+		loopbackAnswer =
+		  loopbackAnswer.replace('a=ice-options:google-ice\\r\\n', '');
+		// As of Chrome M51, an additional crypto method has been added when
+		// using SDES. This works in a P2P due to the negotiation phase removes
+		// this line but for loopback where we reuse the offer, that is skipped
+		// and remains in the answer and breaks the call.
+		// https://bugs.chromium.org/p/chromium/issues/detail?id=616263
+		loopbackAnswer = loopbackAnswer
+		  .replace(/a=crypto:0 AES_CM_128_HMAC_SHA1_32\sinline:.{44}/, '');
+		return loopbackAnswer;
+	} else if (message.type === 'candidate') {
+		return msg;
+	} else {
+		trace('Returning null, this is bad!!');
+		return null;
+	}
+}
 
-signalingServer.onmessage = function(message) {
-    if(state.peerConnectionClient) {
-        state.peerConnectionClient.receiveSignalingMessage(message.data);
-    }
-    console.log(message.data);
-};
+// This is a loopback signaling server.
+signalingServer = {
+	onmessage: function(message) {
+		// This function is called when we receive a message from the other side.
+		if(state.peerConnectionClient) {
+			state.peerConnectionClient.receiveSignalingMessage(message);
+		}
+	},
+	send: function(message) {
+		this.onmessage(getLoopbackResponse(message));
+	}
+}
 
 /**
  * After the initialization of the signaling channel, this is the second step
@@ -53,10 +79,6 @@ signalingServer.onmessage = function(message) {
  * we will not be performing any calls.
  */
 function startGettingUserMedia() {
-    /**
-     * When we have connected with the websocket, the first thing todo is to
-     * get usermedia.
-     */
     mediaConstraints = {
         video: true,
         audio: true
@@ -125,8 +147,8 @@ function createPeerClientObject() {
         }
     };
     pcClient.onremotesdpset = function(hasRemoteVideo) {
-        console.error("On remote sdp set.");
-        console.log(hasRemoteVideo);
+        // console.error("On remote sdp set.");
+        // console.log(hasRemoteVideo);
         // If hasRemoteVideo, then wait for the video to arrive,
         // else do nothing.
         if(hasRemoteVideo) {
@@ -143,15 +165,15 @@ function createPeerClientObject() {
         remoteVideo.srcObject = stream;
     };
     pcClient.onsignalingstatechange = function() {
-        console.log("On signaling state changed")
+        // console.log("On signaling state changed")
         //update info div
     };
     pcClient.oniceconnectionstatechange = function() {
-        console.log("On Ice connection state chagned")
+        // console.log("On Ice connection state chagned")
         // update info div
     };
     pcClient.onnewicecandidate = function() {
-        console.log("On new ICE Candidate.");
+        // console.log("On new ICE Candidate.");
         // on new ice candidate.
         // an ice candidate that has not been
         // seen before.
@@ -163,9 +185,14 @@ function createPeerClientObject() {
     // Save this object in the state.
     state.peerConnectionClient = pcClient;
 
+    console.log("Adding local stream: ");
+    console.log(state.localStream);
+    pcClient.addStream(state.localStream);
+
     var offerOptions = {};
     pcClient.startAsCaller(offerOptions);
-    setTimeout(() => {
-        pcClient.addStream(state.localStream);
-    }, 3000);
 }
+
+
+
+startGettingUserMedia();
